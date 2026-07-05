@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Entrada Expressa - Estacionamento</title>
+    <!-- Importando a biblioteca Tesseract.js para leitura da placa -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h2 { color: #333; margin-bottom: 10px; }
+        #video-container {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            background: #000;
+        }
+        video { width: 100%; height: auto; display: block; }
+        canvas { display: none; } /* Oculto, usado apenas para processar a imagem */
+        .btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 15px 20px;
+            font-size: 18px;
+            border-radius: 8px;
+            margin-top: 20px;
+            width: 100%;
+            max-width: 400px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .btn:disabled { background-color: #ccc; cursor: not-allowed; }
+        .btn-print { background-color: #28a745; display: none; }
+        #status { margin-top: 15px; font-weight: bold; color: #555; text-align: center; }
+        .ticket-preview {
+            margin-top: 20px;
+            padding: 15px;
+            background: white;
+            border: 1px dashed #333;
+            width: 100%;
+            max-width: 350px;
+            display: none;
+            text-align: center;
+            font-family: 'Courier New', Courier, monospace;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Entrada de Veículos</h2>
+    
+    <div id="video-container">
+        <!-- Câmera traseira (environment) -->
+        <video id="camera" autoplay playsinline></video>
+    </div>
+    <canvas id="snapshot"></canvas>
+
+    <button id="btn-capture" class="btn">📷 Ler Placa</button>
+    <div id="status">Aguardando...</div>
+
+    <div id="ticket-preview" class="ticket-preview">
+        <strong>ESTACIONAMENTO</strong><br>
+        ------------------------<br>
+        Placa: <span id="placa-lida">---</span><br>
+        Entrada: <span id="hora-entrada">---</span><br>
+        ------------------------
+    </div>
+
+    <button id="btn-print" class="btn btn-print">🖨️ Imprimir Ticket</button>
+
+    <script>
+        const video = document.getElementById('camera');
+        const canvas = document.getElementById('snapshot');
+        const ctx = canvas.getContext('2d');
+        const btnCapture = document.getElementById('btn-capture');
+        const btnPrint = document.getElementById('btn-print');
+        const statusDiv = document.getElementById('status');
+        const ticketPreview = document.getElementById('ticket-preview');
+        const placaLidaSpan = document.getElementById('placa-lida');
+        const horaEntradaSpan = document.getElementById('hora-entrada');
+
+        let placaAtual = "";
+        let horaAtual = "";
+
+        // 1. Inicializar a câmera traseira
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: 'environment' } 
+                });
+                video.srcObject = stream;
+            } catch (err) {
+                statusDiv.innerText = "Erro ao acessar a câmera. Verifique as permissões.";
+                console.error(err);
+            }
+        }
+
+        // Inicia a câmera ao carregar a página
+        startCamera();
+
+        // 2. Capturar foto e extrair texto (OCR)
+        btnCapture.addEventListener('click', async () => {
+            btnCapture.disabled = true;
+            statusDiv.innerText = "Processando placa... Aguarde.";
+            ticketPreview.style.display = "none";
+            btnPrint.style.display = "none";
+
+            // Desenha o frame atual do vídeo no canvas
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Converte o canvas para imagem base64
+            const imageData = canvas.toDataURL('image/jpeg');
+
+            try {
+                // Reconhecimento de texto usando Tesseract.js
+                const { data: { text } } = await Tesseract.recognize(
+                    imageData,
+                    'eng', // O inglês lida bem com a fonte padrão de placas
+                    { logger: m => console.log(m) }
+                );
+
+                // Limpeza básica do texto para encontrar formato de placa (ABC1234 ou ABC1D23)
+                const cleanText = text.replace(/[^A-Z0-9]/ig, '').toUpperCase();
+                
+                if (cleanText.length >= 7) {
+                    placaAtual = cleanText.substring(0, 7); // Pega os primeiros 7 caracteres válidos
+                    horaAtual = new Date().toLocaleString('pt-BR');
+
+                    statusDiv.innerText = "Placa identificada com sucesso!";
+                    placaLidaSpan.innerText = placaAtual;
+                    horaEntradaSpan.innerText = horaAtual;
+                    
+                    ticketPreview.style.display = "block";
+                    btnPrint.style.display = "block";
+                } else {
+                    statusDiv.innerText = "Não foi possível ler a placa. Tente novamente.";
+                }
+            } catch (err) {
+                statusDiv.innerText = "Erro ao processar imagem.";
+                console.error(err);
+            }
+            btnCapture.disabled = false;
+        });
+
+        // 3. Comunicação Bluetooth com a Mini Impressora Térmica
+        btnPrint.addEventListener('click', async () => {
+            try {
+                statusDiv.innerText = "Conectando à impressora...";
+                
+                // Solicita pareamento com dispositivos Bluetooth genéricos (Impressoras térmicas)
+                const device = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true,
+                    optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb'] // UUID padrão para muitas impressoras ESC/POS
+                });
+
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
+                const characteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
+
+                // Montar o comando ESC/POS simples
+                const textoTicket = 
+                    "ESTACIONAMENTO\n" +
+                    "------------------------\n" +
+                    "Placa: " + placaAtual + "\n" +
+                    "Entrada: " + horaAtual + "\n" +
+                    "------------------------\n" +
+                    "\n\n\n"; // Linhas em branco para o papel sair adequadamente
+
+                // Converte a string para o formato que a impressora entende (Uint8Array)
+                const encoder = new TextEncoder();
+                const data = encoder.encode(textoTicket);
+
+                // Envia para a impressora
+                await characteristic.writeValue(data);
+                
+                statusDiv.innerText = "Ticket impresso com sucesso!";
+                
+                // Desconecta após imprimir
+                device.gatt.disconnect();
+                
+                // Reseta a interface para o próximo carro
+                setTimeout(() => {
+                    ticketPreview.style.display = "none";
+                    btnPrint.style.display = "none";
+                    statusDiv.innerText = "Pronto para o próximo veículo.";
+                }, 3000);
+
+            } catch (error) {
+                console.error(error);
+                statusDiv.innerText = "Erro na impressão. Verifique o pareamento bluetooth.";
+            }
+        });
+    </script>
+</body>
+</html>
