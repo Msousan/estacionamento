@@ -3,9 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Entrada Expressa - Estacionamento</title>
-    <!-- Importando a biblioteca Tesseract.js para leitura da placa -->
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <title>Entrada Expressa - Digitação</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -16,202 +14,147 @@
             flex-direction: column;
             align-items: center;
         }
-        h2 { color: #333; margin-bottom: 10px; }
-        #video-container {
+        h2 { color: #333; margin-bottom: 20px; text-align: center; }
+        
+        .input-group {
             width: 100%;
             max-width: 400px;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            background: #000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
         }
-        video { width: 100%; height: auto; display: block; }
-        canvas { display: none; } /* Oculto, usado apenas para processar a imagem */
+
+        label {
+            font-size: 18px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        /* Campo de digitação gigante para facilitar o toque */
+        #placa-input {
+            font-size: 40px;
+            text-align: center;
+            padding: 15px;
+            border: 2px solid #007bff;
+            border-radius: 8px;
+            text-transform: uppercase;
+            font-weight: bold;
+            letter-spacing: 2px;
+            outline: none;
+        }
+        
+        #placa-input:focus {
+            border-color: #0056b3;
+            box-shadow: 0 0 8px rgba(0, 123, 255, 0.5);
+        }
+
         .btn {
             background-color: #007bff;
             color: white;
             border: none;
-            padding: 15px 20px;
-            font-size: 18px;
+            padding: 20px;
+            font-size: 20px;
+            font-weight: bold;
             border-radius: 8px;
-            margin-top: 20px;
             width: 100%;
             max-width: 400px;
             cursor: pointer;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            transition: background-color 0.2s;
         }
+        .btn:active { background-color: #0056b3; }
         .btn:disabled { background-color: #ccc; cursor: not-allowed; }
-        .btn-print { background-color: #28a745; display: none; }
-        #status { margin-top: 15px; font-weight: bold; color: #555; text-align: center; }
-        .ticket-preview {
-            margin-top: 20px;
-            padding: 15px;
-            background: white;
-            border: 1px dashed #333;
-            width: 100%;
-            max-width: 350px;
-            display: none;
-            text-align: center;
-            font-family: 'Courier New', Courier, monospace;
-        }
+        
+        #status { margin-top: 20px; font-weight: bold; color: #555; text-align: center; font-size: 16px; }
     </style>
 </head>
 <body>
 
-    <h2>Entrada de Veículos</h2>
-    
-    <div id="video-container">
-        <!-- Câmera traseira (environment) -->
-        <video id="camera" autoplay playsinline></video>
-    </div>
-    <canvas id="snapshot"></canvas>
+    <h2>Controle de Vagas</h2>
 
-    <button id="btn-capture" class="btn">📷 Ler Placa</button>
-    <div id="status">Aguardando...</div>
-
-    <div id="ticket-preview" class="ticket-preview">
-        <strong>ESTACIONAMENTO</strong><br>
-        ------------------------<br>
-        Placa: <span id="placa-lida">---</span><br>
-        Entrada: <span id="hora-entrada">---</span><br>
-        ------------------------
+    <div class="input-group">
+        <label for="placa-input">Digite a Placa do Veículo:</label>
+        <!-- Limita a 7 caracteres e usa o teclado padrão -->
+        <input type="text" id="placa-input" maxlength="7" placeholder="ABC1234" autocomplete="off">
     </div>
 
-    <button id="btn-print" class="btn btn-print">🖨️ Imprimir Ticket</button>
+    <button id="btn-print" class="btn" disabled>🖨️ Registrar e Imprimir</button>
+    <div id="status">Aguardando digitação...</div>
 
     <script>
-        const video = document.getElementById('camera');
-        const canvas = document.getElementById('snapshot');
-        const ctx = canvas.getContext('2d');
-        const btnCapture = document.getElementById('btn-capture');
+        const placaInput = document.getElementById('placa-input');
         const btnPrint = document.getElementById('btn-print');
         const statusDiv = document.getElementById('status');
-        const ticketPreview = document.getElementById('ticket-preview');
-        const placaLidaSpan = document.getElementById('placa-lida');
-        const horaEntradaSpan = document.getElementById('hora-entrada');
 
-        let placaAtual = "";
-        let horaAtual = "";
-
-        // 1. Inicializar a câmera traseira
-        async function startCamera() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: 'environment' } 
-                });
-                video.srcObject = stream;
-            } catch (err) {
-                statusDiv.innerText = "Erro ao acessar a câmera. Verifique as permissões.";
-                console.error(err);
+        // Lógica para validar a entrada em tempo real
+        placaInput.addEventListener('input', function(e) {
+            // Remove qualquer caractere que não seja letra ou número e força maiúscula
+            this.value = this.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+            
+            // Só libera o botão de imprimir se tiver exatamente 7 caracteres
+            if (this.value.length === 7) {
+                btnPrint.disabled = false;
+                btnPrint.style.backgroundColor = '#28a745'; // Fica verde indicando que está pronto
+                statusDiv.innerText = "Placa válida. Pronto para imprimir!";
+            } else {
+                btnPrint.disabled = true;
+                btnPrint.style.backgroundColor = '#007bff';
+                statusDiv.innerText = "Digite os 7 caracteres da placa.";
             }
-        }
-
-        // Inicia a câmera ao carregar a página
-        startCamera();
-
-        // 2. Capturar foto e extrair texto (OCR)
-        // 2. Capturar foto e extrair texto (OCR) com Filtro Inteligente
-        btnCapture.addEventListener('click', async () => {
-            btnCapture.disabled = true;
-            statusDiv.innerText = "Lendo a placa... Mantenha o celular firme.";
-            ticketPreview.style.display = "none";
-            btnPrint.style.display = "none";
-
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const imageData = canvas.toDataURL('image/jpeg');
-
-            try {
-                const { data: { text } } = await Tesseract.recognize(
-                    imageData,
-                    'eng', 
-                    { logger: m => console.log(m) }
-                );
-
-                // Converte tudo para maiúsculo para facilitar a validação
-                let textoBruto = text.toUpperCase();
-
-                // Dicionário de correção rápida (Ex: Tesseract lê 0 em vez de O)
-                // Remove espaços em branco e traços
-                textoBruto = textoBruto.replace(/[\s-]/g, '');
-
-                // Expressão Regular (Regex) que busca EXATAMENTE o padrão de placa no meio de qualquer texto lido
-                // [A-Z]{3} = 3 Letras
-                // [0-9] = 1 Número
-                // [A-Z0-9] = 1 Letra ou Número (Cobre a diferença do Mercosul)
-                // [0-9]{2} = 2 Números no final
-                const regexPlaca = /[A-Z]{3}[0-9][A-Z0-9][0-9]{2}/;
-                const match = textoBruto.match(regexPlaca);
-
-                if (match) {
-                    placaAtual = match[0]; // Pega a sequência exata que bateu com a regra
-                    horaAtual = new Date().toLocaleString('pt-BR');
-
-                    statusDiv.innerText = "Placa identificada com sucesso!";
-                    placaLidaSpan.innerText = placaAtual;
-                    horaEntradaSpan.innerText = horaAtual;
-                    
-                    ticketPreview.style.display = "block";
-                    btnPrint.style.display = "block";
-                } else {
-                    // Se não encontrou o padrão exato, avisa para tentar de novo
-                    statusDiv.innerText = "Placa não reconhecida claramente. Chegue mais perto ou melhore o foco.";
-                    console.log("Texto confuso lido pelo Tesseract:", textoBruto);
-                }
-            } catch (err) {
-                statusDiv.innerText = "Erro ao processar imagem.";
-                console.error(err);
-            }
-            btnCapture.disabled = false;
         });
 
-        // 3. Comunicação Bluetooth com a Mini Impressora Térmica
+        // Comunicação Bluetooth com a Mini Impressora
         btnPrint.addEventListener('click', async () => {
+            const placaAtual = placaInput.value;
+            const horaAtual = new Date().toLocaleString('pt-BR');
+            
             try {
-                statusDiv.innerText = "Conectando à impressora...";
+                btnPrint.disabled = true;
+                statusDiv.innerText = "Conectando à impressora bluetooth...";
                 
-                // Solicita pareamento com dispositivos Bluetooth genéricos (Impressoras térmicas)
+                // Solicita pareamento com dispositivos Bluetooth genéricos
                 const device = await navigator.bluetooth.requestDevice({
                     acceptAllDevices: true,
-                    optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb'] // UUID padrão para muitas impressoras ESC/POS
+                    optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb']
                 });
 
                 const server = await device.gatt.connect();
                 const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
                 const characteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
 
-                // Montar o comando ESC/POS simples
+                // Monta o layout do ticket
                 const textoTicket = 
                     "ESTACIONAMENTO\n" +
                     "------------------------\n" +
                     "Placa: " + placaAtual + "\n" +
                     "Entrada: " + horaAtual + "\n" +
                     "------------------------\n" +
-                    "\n\n\n"; // Linhas em branco para o papel sair adequadamente
+                    "\n\n\n";
 
-                // Converte a string para o formato que a impressora entende (Uint8Array)
                 const encoder = new TextEncoder();
                 const data = encoder.encode(textoTicket);
 
-                // Envia para a impressora
+                // Dispara a impressão
                 await characteristic.writeValue(data);
                 
                 statusDiv.innerText = "Ticket impresso com sucesso!";
                 
-                // Desconecta após imprimir
+                // Desconecta a impressora e limpa o campo para o próximo carro
                 device.gatt.disconnect();
+                placaInput.value = "";
+                btnPrint.disabled = true;
+                btnPrint.style.backgroundColor = '#007bff';
                 
-                // Reseta a interface para o próximo carro
                 setTimeout(() => {
-                    ticketPreview.style.display = "none";
-                    btnPrint.style.display = "none";
-                    statusDiv.innerText = "Pronto para o próximo veículo.";
-                }, 3000);
+                    statusDiv.innerText = "Aguardando próxima placa...";
+                    placaInput.focus(); // Já deixa o teclado aberto
+                }, 2000);
 
             } catch (error) {
                 console.error(error);
-                statusDiv.innerText = "Erro na impressão. Verifique o pareamento bluetooth.";
+                statusDiv.innerText = "Erro ao conectar. Ligue a impressora e tente novamente.";
+                btnPrint.disabled = false;
             }
         });
     </script>
