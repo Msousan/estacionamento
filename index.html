@@ -105,15 +105,21 @@
         });
 
         // Comunicação Bluetooth com a Mini Impressora
+       // Comunicação Bluetooth com a Mini Impressora
         btnPrint.addEventListener('click', async () => {
             const placaAtual = placaInput.value;
-            const horaAtual = new Date().toLocaleString('pt-BR');
+            
+            // Captura o momento EXATO do clique no botão
+            const momentoExato = new Date();
+            
+            // Desmembra e formata no padrão brasileiro
+            const dataFormatada = momentoExato.toLocaleDateString('pt-BR');
+            const horaFormatada = momentoExato.toLocaleTimeString('pt-BR'); // Retorna HH:MM:SS
             
             try {
                 btnPrint.disabled = true;
                 statusDiv.innerText = "Conectando à impressora bluetooth...";
                 
-                // Solicita pareamento com dispositivos Bluetooth genéricos
                 const device = await navigator.bluetooth.requestDevice({
                     acceptAllDevices: true,
                     optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb']
@@ -123,24 +129,23 @@
                 const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
                 const characteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
 
-                // Monta o layout do ticket
+                // Monta o layout do ticket com Data e Hora separadas
                 const textoTicket = 
                     "ESTACIONAMENTO\n" +
                     "------------------------\n" +
-                    "Placa: " + placaAtual + "\n" +
-                    "Entrada: " + horaAtual + "\n" +
+                    "Placa:   " + placaAtual + "\n" +
+                    "Data:    " + dataFormatada + "\n" +
+                    "Entrada: " + horaFormatada + "\n" +
                     "------------------------\n" +
-                    "\n\n\n";
+                    "\n\n\n"; // Linhas em branco para o corte do papel
 
                 const encoder = new TextEncoder();
                 const data = encoder.encode(textoTicket);
 
-                // Dispara a impressão
                 await characteristic.writeValue(data);
                 
                 statusDiv.innerText = "Ticket impresso com sucesso!";
                 
-                // Desconecta a impressora e limpa o campo para o próximo carro
                 device.gatt.disconnect();
                 placaInput.value = "";
                 btnPrint.disabled = true;
@@ -148,7 +153,7 @@
                 
                 setTimeout(() => {
                     statusDiv.innerText = "Aguardando próxima placa...";
-                    placaInput.focus(); // Já deixa o teclado aberto
+                    placaInput.focus(); 
                 }, 2000);
 
             } catch (error) {
